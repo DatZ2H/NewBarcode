@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\SICKLMS\\SICKLMS.csproj": {}
+    "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\SICKLMS\\SICKLMS.csproj": {}
   },
   "projects": {
-    "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\SICKLMS\\SICKLMS.csproj": {
+    "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\SICKLMS\\SICKLMS.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\SICKLMS\\SICKLMS.csproj",
+        "projectUniqueName": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\SICKLMS\\SICKLMS.csproj",
         "projectName": "SICKLMS",
-        "projectPath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\SICKLMS\\SICKLMS.csproj",
-        "packagesPath": "C:\\Users\\quocd\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\SICKLMS\\obj\\",
+        "projectPath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\SICKLMS\\SICKLMS.csproj",
+        "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\SICKLMS\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\quocd\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -54,7 +54,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.100\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.101\\RuntimeIdentifierGraph.json"
         }
       }
     }

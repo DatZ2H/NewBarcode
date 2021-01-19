@@ -27,19 +27,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\quocd\\.nuget\\packages\\": {}
+    "C:\\Users\\Admin\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\ClientSocket\\Client.csproj",
+      "projectUniqueName": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\ClientSocket\\Client.csproj",
       "projectName": "Client",
-      "projectPath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\ClientSocket\\Client.csproj",
-      "packagesPath": "C:\\Users\\quocd\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\ClientSocket\\obj\\",
+      "projectPath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\ClientSocket\\Client.csproj",
+      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\ClientSocket\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\quocd\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
@@ -53,8 +53,8 @@
         "netcoreapp3.1": {
           "targetAlias": "netcoreapp3.1",
           "projectReferences": {
-            "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\Common\\Common.csproj": {
-              "projectPath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\Common\\Common.csproj"
+            "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\Common\\Common.csproj": {
+              "projectPath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\Common\\Common.csproj"
             }
           }
         }
@@ -83,7 +83,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.100\\RuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\5.0.101\\RuntimeIdentifierGraph.json"
       }
     }
   }

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "eA4DJjbw6goDbLxNHM1lc4TjqRfo1+M9/c4e0lNvMj7PnNN4WG+O2EyhOEit494qHsDmjhosPS+qJxuXdZl5UQ==",
+  "dgSpecHash": "fcA9pPA47WDVgwq77H4kwFdL/ioRf392F/veYplEa4nHAH3b4YymD3RBf30bJVFqQBBVdZlG7rJEB7qCrFh/8A==",
   "success": true,
-  "projectFilePath": "C:\\Users\\quocd\\Source\\Repos\\NewBarocode\\ClientSocket\\Client.csproj",
+  "projectFilePath": "C:\\Users\\Admin\\Source\\Repos\\NewBarcode\\ClientSocket\\Client.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }
