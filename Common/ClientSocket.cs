@@ -21,7 +21,9 @@ namespace Common
         public int bufferSize { get; set; } = 1024;
         public byte[] Buffer { get; private set; }
         public List<byte> BufferList { get; set; }
-        public string ipAddress { get; set; }
+
+        public string ipAddress  { get; set; }
+
         private int _port = 2112;
         public int Port
         {
@@ -34,18 +36,30 @@ namespace Common
         public int SendTimeout { get; set; }
         public ClientSocket()
         {
-
+            this.ipAddress = IPAddress.Loopback.ToString();
+            clientSocket = CreateSocket();
+ 
+        }
+        public ClientSocket(string ipAddress, int Port)
+        {
+            this.ipAddress = ipAddress;
+            this.Port = Port;
+            clientSocket=CreateSocket();
+  
         }
         public static Socket CreateSocket()
         {
             return new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         }
-        private void Connect()
+        public void Connect()
         {
             Console.WriteLine("Connecting...");
-            CreateSocket();
+            Console.WriteLine("Watting connect with ipaddress is : {0} and port is : {1}" , ipAddress, Port);
+
+         
             int attempts = 0;
-            while (!clientSocket.Connected)
+            Console.WriteLine("gia tri cuar attempts {0} va connected la {1}", attempts, IsConnected());
+            while (!IsConnected())
             {
                 try
                 {
@@ -56,10 +70,13 @@ namespace Common
                 }
                 catch (SocketException)
                 {
-                    Console.Clear();
+                    Console.WriteLine("out ham oroi ");
+                    Reconnect();
+                    
+                  //  Console.Clear();
                 }
             }
-            Console.Clear();
+          //  Console.Clear();
             Console.WriteLine("Connected");
 
            
@@ -69,16 +86,55 @@ namespace Common
             clientSocket.Close();
             Console.WriteLine("Disconnected");
         }
-        private void Reconnect()
+        public void Reconnect()
         {
             int i = 1;
-            while(clientSocket.Connected == false)
+            while(IsConnected()== false)
             {
                
                     Console.WriteLine(" Socket is not connected. Connection attempt {0}", i);
                     Connect();
                 
             }
+        }
+        public bool IsConnected()
+        {
+            return clientSocket.Connected;
+        }
+        public void Read()
+        {
+            if (clientSocket.Connected == false)
+            {
+                Reconnect();
+            }
+            try
+            {
+                clientSocket.BeginReceive(Buffer, 0,bufferSize, SocketFlags.None, new AsyncCallback(ReadCallBack), this);
+                Console.WriteLine("den read roi");
+            }
+            catch
+            {
+
+            }
+        }
+        private void ReadCallBack(IAsyncResult ar)
+        {
+            int bytesRead;
+            try
+            {
+                bytesRead = clientSocket.EndReceive(ar);
+                for(int i =0; i < bytesRead; i++)
+                {
+                    BufferList.Add(Buffer[i]);
+                }
+                Console.WriteLine("den read roi =====");
+            }
+            catch(SocketException)
+            {
+                Connect();
+                
+            }
+
         }
     }
 }

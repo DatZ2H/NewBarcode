@@ -1,0 +1,13 @@
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.exe
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.deps.json
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.runtimeconfig.json
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.runtimeconfig.dev.json
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.dll
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\bin\Debug\netcoreapp3.1\SICKLMS.pdb
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.csprojAssemblyReference.cache
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.AssemblyInfoInputs.cache
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.AssemblyInfo.cs
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.csproj.CoreCompileInputs.cache
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.dll
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.pdb
+C:\Users\quocd\Source\Repos\NewBarocode\SICKLMS\obj\Debug\netcoreapp3.1\SICKLMS.genruntimeconfig.cache

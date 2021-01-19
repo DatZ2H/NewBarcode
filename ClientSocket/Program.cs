@@ -1,14 +1,21 @@
 ﻿using System;
 using Common;
 
+
 namespace Client
 {
     class Program
     {
-        ClientSocket ClientTCP = new ClientSocket();
+        static ClientSocket ClientTCP = new ClientSocket();
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+
+               Console.WriteLine("Hello World!");
+               ClientTCP.Connect();
+
+
+            ClientTCP.Read();
+            //   Console.ReadKey();
             
         }
     }

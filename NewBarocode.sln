@@ -5,7 +5,9 @@ VisualStudioVersion = 16.0.30717.126
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{40E5EABB-6200-4CC5-81BC-55EFF7B3424E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClientSocket", "ClientSocket\ClientSocket.csproj", "{7163832A-6A0C-4772-89D8-B23EF9F63406}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "ClientSocket\Client.csproj", "{7163832A-6A0C-4772-89D8-B23EF9F63406}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SICKLMS", "SICKLMS\SICKLMS.csproj", "{8FF6FE56-84A6-4189-8C90-37A9AC3E0973}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{7163832A-6A0C-4772-89D8-B23EF9F63406}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7163832A-6A0C-4772-89D8-B23EF9F63406}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7163832A-6A0C-4772-89D8-B23EF9F63406}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8FF6FE56-84A6-4189-8C90-37A9AC3E0973}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8FF6FE56-84A6-4189-8C90-37A9AC3E0973}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8FF6FE56-84A6-4189-8C90-37A9AC3E0973}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8FF6FE56-84A6-4189-8C90-37A9AC3E0973}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
