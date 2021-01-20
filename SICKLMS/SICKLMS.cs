@@ -6,16 +6,31 @@ using System.Threading.Tasks;
 
 namespace BSICK.Sensors.LMS1xx
 {
-    public class LMS1XX
+    public class BarcodeScanner
     {
-        #region Enumérations
+        #region Enum Socket and Network
 
-        public enum SocketConnectionResult { CONNECTED = 0, CONNECT_TIMEOUT = 1, CONNECT_ERROR = 2, DISCONNECTED = 3, DISCONNECT_TIMEOUT = 4, DISCONNECT_ERROR = 5 }
-        public enum NetworkStreamResult { STARTED = 0, STOPPED = 1, TIMEOUT = 2, ERROR = 3, CLIENT_NOT_CONNECTED = 4 }
+        public enum SocketConnectionResult 
+        { 
+            CONNECTED = 0, 
+            CONNECT_TIMEOUT = 1, 
+            CONNECT_ERROR = 2, 
+            DISCONNECTED = 3, 
+            DISCONNECT_TIMEOUT = 4, 
+            DISCONNECT_ERROR = 5, 
+        }
+        public enum NetworkStreamResult 
+        { 
+            STARTED = 0, 
+            STOPPED = 1, 
+            TIMEOUT = 2, 
+            ERROR = 3, 
+            CLIENT_NOT_CONNECTED = 4 
+        }
 
         #endregion
 
-        #region Propriétés publiques
+        #region Parameter socket
 
         public String IpAddress { get; set; }
         public int Port { get; set; }
@@ -24,23 +39,23 @@ namespace BSICK.Sensors.LMS1xx
 
         #endregion
 
-        #region Propriétés privées
+        #region TCP client
 
         private TcpClient clientSocket;
 
         #endregion
 
-        #region Constructeurs
+        #region Ham khoi tao
 
-        public LMS1XX()
+        public BarcodeScanner()
         {
 
-            this.clientSocket = new TcpClient() { ReceiveTimeout = 1000, SendTimeout = 1000 };
+            this.clientSocket = new TcpClient() { ReceiveTimeout = 10000, SendTimeout = 10000 };
             this.IpAddress = String.Empty;
             this.Port = 0;
         }
 
-        public LMS1XX(string ipAdress, int port, int receiveTimeout, int sendTimeout)
+        public BarcodeScanner(string ipAdress, int port, int receiveTimeout, int sendTimeout)
         {
             this.clientSocket = new TcpClient() { ReceiveTimeout = receiveTimeout, SendTimeout = sendTimeout };
             this.IpAddress = ipAdress;
@@ -49,7 +64,7 @@ namespace BSICK.Sensors.LMS1xx
 
         #endregion
 
-        #region Methodes de base pour le pilotage du capteur
+        #region method
 
         public bool IsSocketConnected()
         {
@@ -58,7 +73,17 @@ namespace BSICK.Sensors.LMS1xx
 
         public SocketConnectionResult Connect()
         {
-            SocketConnectionResult status = (clientSocket.Connected) ? SocketConnectionResult.CONNECTED : SocketConnectionResult.DISCONNECTED;
+            SocketConnectionResult status;
+            if (clientSocket.Connected)
+            {
+               status = SocketConnectionResult.CONNECTED;
+            }
+            else
+            {
+                status = SocketConnectionResult.DISCONNECTED;
+            }
+                    
+            
             if (status == SocketConnectionResult.DISCONNECTED)
             {
                 try
@@ -66,15 +91,34 @@ namespace BSICK.Sensors.LMS1xx
                     clientSocket.Connect(this.IpAddress, this.Port);
                     status = SocketConnectionResult.CONNECTED;
                 }
-                catch (TimeoutException) { status = SocketConnectionResult.CONNECT_TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = SocketConnectionResult.CONNECT_ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = SocketConnectionResult.CONNECT_TIMEOUT; 
+                    this.Disconnect(); 
+                    return status; 
+                }
+                catch (SystemException ) 
+                {
+                   
+                    status = SocketConnectionResult.CONNECT_ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             return status;
         }
 
         public async Task<SocketConnectionResult> ConnectAsync()
         {
-            SocketConnectionResult status = (clientSocket.Connected) ? SocketConnectionResult.CONNECTED : SocketConnectionResult.DISCONNECTED;
+            SocketConnectionResult status;
+            if (clientSocket.Connected)
+            {
+                status = SocketConnectionResult.CONNECTED;
+            }
+            else
+            {
+                status = SocketConnectionResult.DISCONNECTED;
+            }
             if (status == SocketConnectionResult.DISCONNECTED)
             {
                 try
@@ -82,15 +126,33 @@ namespace BSICK.Sensors.LMS1xx
                     await clientSocket.ConnectAsync(this.IpAddress, this.Port);
                     status = SocketConnectionResult.CONNECTED;
                 }
-                catch (TimeoutException) { status = SocketConnectionResult.CONNECT_TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = SocketConnectionResult.CONNECT_ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = SocketConnectionResult.CONNECT_TIMEOUT; 
+                    this.Disconnect(); 
+                    return status;
+                }
+                catch (SystemException) 
+                { 
+                    status = SocketConnectionResult.CONNECT_ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             return status;
         }
 
         public SocketConnectionResult Disconnect()
         {
-            SocketConnectionResult status = (clientSocket.Connected) ? SocketConnectionResult.CONNECTED : SocketConnectionResult.DISCONNECTED;
+            SocketConnectionResult status;
+            if (clientSocket.Connected)
+            {
+                status = SocketConnectionResult.CONNECTED;
+            }
+            else
+            {
+                status = SocketConnectionResult.DISCONNECTED;
+            }
             if (status == SocketConnectionResult.CONNECTED)
             {
                 try
@@ -99,8 +161,16 @@ namespace BSICK.Sensors.LMS1xx
                     clientSocket = new TcpClient() { ReceiveTimeout = this.ReceiveTimeout };
                     status = SocketConnectionResult.DISCONNECTED;
                 }
-                catch (TimeoutException) { status = SocketConnectionResult.DISCONNECT_TIMEOUT; return status; }
-                catch (SystemException) { status = SocketConnectionResult.DISCONNECT_ERROR; return status; }
+                catch (TimeoutException) 
+                { 
+                    status = SocketConnectionResult.DISCONNECT_TIMEOUT; 
+                    return status; 
+                }
+                catch (SystemException) 
+                { 
+                    status = SocketConnectionResult.DISCONNECT_ERROR; 
+                    return status; 
+                }
             }
             return status;
         }
@@ -118,8 +188,18 @@ namespace BSICK.Sensors.LMS1xx
                     serverStream.Write(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STARTED;
                 }
-                catch (TimeoutException) { status = NetworkStreamResult.TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = NetworkStreamResult.ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = NetworkStreamResult.TIMEOUT; 
+                    this.Disconnect(); 
+                    return status; 
+                }
+                catch (SystemException) 
+                { 
+                    status = NetworkStreamResult.ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             else
             {
@@ -142,8 +222,17 @@ namespace BSICK.Sensors.LMS1xx
                     await serverStream.WriteAsync(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STARTED;
                 }
-                catch (TimeoutException) { status = NetworkStreamResult.TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = NetworkStreamResult.ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = NetworkStreamResult.TIMEOUT; 
+                    this.Disconnect(); return status; 
+                }
+                catch (SystemException) 
+                { 
+                    status = NetworkStreamResult.ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             else
             {
@@ -167,8 +256,18 @@ namespace BSICK.Sensors.LMS1xx
                     serverStream.Write(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STOPPED;
                 }
-                catch (TimeoutException) { status = NetworkStreamResult.TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = NetworkStreamResult.ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = NetworkStreamResult.TIMEOUT; 
+                    this.Disconnect(); 
+                    return status;
+                }
+                catch (SystemException) 
+                { 
+                    status = NetworkStreamResult.ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             else
             {
@@ -192,8 +291,18 @@ namespace BSICK.Sensors.LMS1xx
                     await serverStream.WriteAsync(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STOPPED;
                 }
-                catch (TimeoutException) { status = NetworkStreamResult.TIMEOUT; this.Disconnect(); return status; }
-                catch (SystemException) { status = NetworkStreamResult.ERROR; this.Disconnect(); return status; }
+                catch (TimeoutException) 
+                { 
+                    status = NetworkStreamResult.TIMEOUT; 
+                    this.Disconnect(); 
+                    return status; 
+                }
+                catch (SystemException) 
+                { 
+                    status = NetworkStreamResult.ERROR; 
+                    this.Disconnect(); 
+                    return status; 
+                }
             }
             else
             {

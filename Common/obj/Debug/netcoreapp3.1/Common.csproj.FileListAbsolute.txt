@@ -1,9 +1,0 @@
-C:\Users\quocd\Source\Repos\NewBarocode\Common\bin\Debug\netcoreapp3.1\Common.deps.json
-C:\Users\quocd\Source\Repos\NewBarocode\Common\bin\Debug\netcoreapp3.1\Common.dll
-C:\Users\quocd\Source\Repos\NewBarocode\Common\bin\Debug\netcoreapp3.1\Common.pdb
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.csprojAssemblyReference.cache
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.AssemblyInfoInputs.cache
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.AssemblyInfo.cs
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.csproj.CoreCompileInputs.cache
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.dll
-C:\Users\quocd\Source\Repos\NewBarocode\Common\obj\Debug\netcoreapp3.1\Common.pdb
