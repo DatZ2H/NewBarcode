@@ -3,115 +3,196 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
+using System.Linq;
 
 namespace BSICK.Sensors.LMS1xx
 {
     public class BarcodeScanner
     {
-        #region Enum Socket and Network
+        #region Enumérations
 
-        public enum SocketConnectionResult 
-        { 
-            CONNECTED = 0, 
-            CONNECT_TIMEOUT = 1, 
-            CONNECT_ERROR = 2, 
-            DISCONNECTED = 3, 
-            DISCONNECT_TIMEOUT = 4, 
-            DISCONNECT_ERROR = 5, 
+        public enum SocketConnectionResult
+        {
+            CONNECTED = 0,
+            CONNECT_TIMEOUT = 1,
+            CONNECT_ERROR = 2,
+            DISCONNECTED = 3,
+            DISCONNECT_TIMEOUT = 4,
+            DISCONNECT_ERROR = 5,
         }
-        public enum NetworkStreamResult 
-        { 
-            STARTED = 0, 
-            STOPPED = 1, 
-            TIMEOUT = 2, 
-            ERROR = 3, 
-            CLIENT_NOT_CONNECTED = 4 
+        public enum NetworkStreamResult
+        {
+            STARTED = 0,
+            STOPPED = 1,
+            TIMEOUT = 2,
+            ERROR = 3,
+            CLIENT_NOT_CONNECTED = 4,
         }
 
         #endregion
 
-        #region Parameter socket
+        #region Propriétés publiques
 
         public String IpAddress { get; set; }
         public int Port { get; set; }
         public int ReceiveTimeout { get; set; }
         public int SendTimeout { get; set; }
+        public int HeartBeatTimeout { get; set; }
+        private bool IsAutoConntecSet { get; set; }
+        private bool IsNoReadOk { get; set; }
+        private bool IsHeartBeatOk { get; set; }
+        private bool IsTriggerOnOk { get; set; }
+        private bool IsTriggerOffOk { get; set; }
+
+
+        private byte[] SocketBuffer;
+        public int socketBufferSize { get; set; } = 1024;
+        public int barcodeLengthSize { get; set; }
+
+        private List<byte> BufferResult = new List<byte>();
+        public List<String> BufferFrameList { get; set; }
+        public List<byte> msgTriggerON { get; set; }
+        public List<byte> msgTriggerOFF { get; set; }
+        public List<byte> msgTerminatorStart { get; set; }
+        public List<byte> msgTerminatorStop { get; set; }
+        public List<byte> msgHeartBeat { get; set; }
+        public List<byte> msgNoRead { get; set; }
+
+        // Case NOREAD     02 3c 53 54 41 52 54 3e 4d 49 53 53 3c 53 54 4f 50 3e 03
+        // Case READ OK    02 3C 53 54 41 52 54 3E 30 35 30 2B 30 31 32 33 34 35 36 37 38 2D 30 31 32 33 34 35 36 37 38 2D 30 31 32 33 34 35 36 37 38 2D 30 31 32 33 34 35 36 37 38 2D 30 31 32 33 34 35 36 37 38 2D 3C 53 54 4F 50 3E 03
+        // Case TRIGGERON  02 3c 53 54 41 52 54 3e 54 47 4f 4e 3c 53 54 4f 50 3e 03
+        // Case TRIGGEROFF 02 3c 53 54 41 52 54 3e 54 47 4f 46 3c 53 54 4f 50 3e 03
+        // Case PING       02 3C 53 54 41 52 54 3E 50 49 4E 47 3C 53 54 4F 50 3E 03
+
+        private static ManualResetEvent ConnectedHandler = new ManualResetEvent(false);
+
+        private static ManualResetEvent ParssingdHandler = new ManualResetEvent(false);
+
+        private Thread CheckKeepConnectThread;
 
         #endregion
 
-        #region TCP client
+        #region Properties
 
-        private TcpClient clientSocket;
+        private Socket clientSocket;
 
         #endregion
 
-        #region Ham khoi tao
+        #region Constructeurs
 
         public BarcodeScanner()
         {
 
-            this.clientSocket = new TcpClient() { ReceiveTimeout = 10000, SendTimeout = 10000 };
+            this.clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { ReceiveTimeout = 1000, SendTimeout = 1000 };
             this.IpAddress = String.Empty;
             this.Port = 0;
+            this.HeartBeatTimeout = 30000;
+            //CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
+            Thread SocketParsingDebugThread = new Thread(() => BufferParsingDebugThread());
+            SocketParsingDebugThread.Start();
+            Console.WriteLine("Thread is ok");
+            SocketBuffer = new byte[socketBufferSize];
+            BufferResult = new List<byte>();
+            BufferFrameList = new List<string>();
+            barcodeLengthSize = 4;
+            msgTriggerON = new List<byte>() { 0x54, 0x47, 0x4f, 0x4e }; // "TGON"
+            msgTriggerOFF = new List<byte>() { 0x54, 0x47, 0x4f, 0x46 };// "TGOF"
+            msgTerminatorStart = new List<byte>() { 0x02, 0x3c, 0x53, 0x54, 0x41, 0x52, 0x54, 0x3e }; //"STX<START>"
+            msgTerminatorStop = new List<byte>() { 0x3c, 0x53, 0x54, 0x4f, 0x50, 0x3e, 0x03 };        //"<STOP>ETX"
+            msgHeartBeat = new List<byte>() { 0x50, 0x49, 0x4e, 0x47 };// "PING"
+            msgNoRead = new List<byte>() { 0x4d, 0x49, 0x53, 0x53 };// "MISS"
+
+
         }
 
-        public BarcodeScanner(string ipAdress, int port, int receiveTimeout, int sendTimeout)
+        public BarcodeScanner(string ipAdress, int port, int receiveTimeout, int sendTimeout, int heartBeatTimeout)
         {
-            this.clientSocket = new TcpClient() { ReceiveTimeout = receiveTimeout, SendTimeout = sendTimeout };
+            this.clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { ReceiveTimeout = receiveTimeout, SendTimeout = sendTimeout };
             this.IpAddress = ipAdress;
             this.Port = port;
+            this.HeartBeatTimeout = heartBeatTimeout;
+            //CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
+            Thread SocketParsingDebugThread = new Thread(() => BufferParsingDebugThread());
+            SocketParsingDebugThread.Start();
+            Console.WriteLine("Thread is ok");
+            SocketBuffer = new byte[socketBufferSize];
+            BufferResult = new List<byte>();
+            BufferFrameList = new List<string>();
+            barcodeLengthSize = 4;
+            msgTriggerON = new List<byte>() { 0x54, 0x47, 0x4f, 0x4e }; // "TGON"
+            msgTriggerOFF = new List<byte>() { 0x54, 0x47, 0x4f, 0x46 };// "TGOF"
+            msgTerminatorStart = new List<byte>() { 0x02, 0x3c, 0x53, 0x54, 0x41, 0x52, 0x54, 0x3e }; //"STX<START>"
+            msgTerminatorStop = new List<byte>() { 0x3c, 0x53, 0x54, 0x4f, 0x50, 0x3e, 0x03 };        //"<STOP>ETX"
+            msgHeartBeat = new List<byte>() { 0x50, 0x49, 0x4e, 0x47 };// "PING"
+            msgNoRead = new List<byte>() { 0x4d, 0x49, 0x53, 0x53 };// "MISS"
+
         }
 
         #endregion
 
-        #region method
+        #region Methodes de base pour le pilotage du capteur
 
         public bool IsSocketConnected()
         {
             return clientSocket.Connected;
         }
-
-        public SocketConnectionResult Connect()
+        public bool IsCheckKeepConnectThreadAlive()
         {
-            SocketConnectionResult status;
-            if (clientSocket.Connected)
+            return CheckKeepConnectThread.IsAlive;
+        }
+        public bool IsNumber(byte value) // 60 is "0"  and 71 is "9"
+        {
+            Console.WriteLine("gia tri value {0}  ", value);
+            if (60 <= value && value <= 71)
             {
-               status = SocketConnectionResult.CONNECTED;
+                return true;
             }
             else
             {
-                status = SocketConnectionResult.DISCONNECTED;
+                return false;
             }
-                    
-            
-            if (status == SocketConnectionResult.DISCONNECTED)
+
+        }
+        public bool IsEqualMsg(List<byte> bufferIn, int startIndex, List<byte> bufferOut)
+        {
+            bool ketqua;
+            ketqua = bufferIn.GetRange(startIndex, bufferOut.Count).SequenceEqual(bufferOut);
+            return bufferIn.GetRange(startIndex, bufferOut.Count).SequenceEqual(bufferOut);
+
+
+        }
+        public void ClearBufferResult(int StartIndex, int Index)
+        {
+            BufferResult.RemoveRange(StartIndex, Index);
+        }
+        public void CheckKeepConnect()
+        {
+            Console.WriteLine("the system  check keep connect ");
+            while (IsSocketConnected())
             {
-                try
+                if (!ConnectedHandler.WaitOne(this.HeartBeatTimeout))
                 {
-                    clientSocket.Connect(this.IpAddress, this.Port);
-                    status = SocketConnectionResult.CONNECTED;
+                    ConnectedHandler.Reset();
+                    Console.WriteLine("the system CheckKeepConnect {0}", this.Disconnect());
+                    Console.WriteLine("the system disconnect because don't catch heartbeat");
+
+                    break;
+
                 }
-                catch (TimeoutException) 
-                { 
-                    status = SocketConnectionResult.CONNECT_TIMEOUT; 
-                    this.Disconnect(); 
-                    return status; 
-                }
-                catch (SystemException ) 
-                {
-                   
-                    status = SocketConnectionResult.CONNECT_ERROR; 
-                    this.Disconnect(); 
-                    return status; 
-                }
+                // Thread.Sleep(2000);
+
             }
-            return status;
+            Console.WriteLine("aaaaaaaaaaaaaaaaaaaaaaaaaa");
+            Console.WriteLine("aaaaaaaaaaaaaaaaaaaaaaaaaa          {0}", IsSocketConnected());
+            CheckKeepConnectThread = null;
         }
 
-        public async Task<SocketConnectionResult> ConnectAsync()
+        public SocketConnectionResult Connect()
         {
+            Console.WriteLine("the system Connecting");
             SocketConnectionResult status;
-            if (clientSocket.Connected)
+            if (this.IsSocketConnected())
             {
                 status = SocketConnectionResult.CONNECTED;
             }
@@ -119,33 +200,191 @@ namespace BSICK.Sensors.LMS1xx
             {
                 status = SocketConnectionResult.DISCONNECTED;
             }
-            if (status == SocketConnectionResult.DISCONNECTED)
+
+            while (status != SocketConnectionResult.CONNECTED)
             {
+                Console.WriteLine("status ----------{0}", status);
                 try
                 {
-                    await clientSocket.ConnectAsync(this.IpAddress, this.Port);
+                    Thread.Sleep(1000);
+                    Console.WriteLine("--------------");
+                    clientSocket.Connect(this.IpAddress, this.Port);
                     status = SocketConnectionResult.CONNECTED;
+                    this.SocketBeginReceive();
+
+                    Console.WriteLine("the system ConnectEDDDDDD");
+                    if (CheckKeepConnectThread == null)
+                    {
+                        CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
+                        CheckKeepConnectThread.Start();
+                    }
+                    else
+                    {
+                        Console.WriteLine("Thread is runnign");
+                    }
                 }
-                catch (TimeoutException) 
-                { 
-                    status = SocketConnectionResult.CONNECT_TIMEOUT; 
-                    this.Disconnect(); 
+                catch (TimeoutException)
+                {
+                    status = SocketConnectionResult.CONNECT_TIMEOUT;
+
+                    Console.WriteLine("the system TimeoutException {0}", this.Disconnect());
                     return status;
                 }
-                catch (SystemException) 
-                { 
-                    status = SocketConnectionResult.CONNECT_ERROR; 
-                    this.Disconnect(); 
-                    return status; 
+                catch (SystemException ex)
+                {
+                    status = SocketConnectionResult.CONNECT_ERROR;
+                    Console.WriteLine("this error is {0}", ex);
+                    Console.WriteLine("the system SystemException {0}", this.Disconnect());
+                    return status;
                 }
+
             }
             return status;
         }
+        public SocketConnectionResult AutoConnect()
+        {
+            SocketConnectionResult status;
+
+            while (!IsSocketConnected())
+            {
+
+                this.Connect();
+
+            }
+            IsAutoConntecSet = true;
+            status = SocketConnectionResult.CONNECTED;
+            return status;
+
+        }
+
+
+
+        private void BufferParsingDebugThread()
+        {
+            while (true)
+            {
+
+                if (ParssingdHandler.WaitOne(1000)) continue;
+
+                if (!ParssingdHandler.Reset()) continue;
+
+                if (IsSocketConnected())
+                {
+                    Console.WriteLine("IsMsgTerminatorStart  {0}", IsSocketConnected());
+
+                    SocketParsing();
+                }
+            }
+
+
+
+        }
+        private void SocketParsing()
+        {
+
+
+            while ((BufferResult.Count >= (msgTerminatorStart.Count + barcodeLengthSize + msgTerminatorStop.Count)) && IsSocketConnected())
+            {
+                Console.WriteLine("BufferResult.Count");
+                bool IsMsgTerminatorStart = true;
+                bool IsMsgTerminatorStop = true;
+                for (int i = 0; i < msgTerminatorStart.Count; i++)
+                {
+                    Console.WriteLine("Start-true");
+                    if (BufferResult[i] != msgTerminatorStart[i])
+                    {
+                        IsMsgTerminatorStart = false;
+                        ClearBufferResult(0, 1);
+                        Console.WriteLine("Start-true");
+                        break;
+                    }
+
+                }
+                if (IsMsgTerminatorStart)
+                {
+                    Console.WriteLine("IsMsgTerminatorStart");
+                    Console.WriteLine("-----------------------------");
+                    Console.WriteLine("IsMsgTerminatorStart 1 {0}", BufferResult[msgTerminatorStart.Count]);
+                    Console.WriteLine("IsMsgTerminatorStart 2 {0}", BufferResult[msgTerminatorStart.Count + 1]);
+                    Console.WriteLine("IsMsgTerminatorStart 3 {0}", BufferResult[msgTerminatorStart.Count + 2]);
+                    Console.WriteLine("IsMsgTerminatorStart 4 {0}", BufferResult[msgTerminatorStart.Count + 3]);
+                    Console.WriteLine("-----------------------------");
+
+                    if ((IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 3])))
+                    {
+                        Console.WriteLine("IS NUMBER");
+                        int BarcodeLength = 0;
+                        BarcodeLength = Int32.Parse(Encoding.ASCII.GetString(BufferResult.ToArray(), msgTerminatorStart.Count, barcodeLengthSize - 1));
+                        int LengthToMsgStop = msgTerminatorStart.Count + barcodeLengthSize + BarcodeLength;
+                        for (int i = LengthToMsgStop; i < (LengthToMsgStop + msgTerminatorStop.Count); i++)
+                        {
+                            if (BufferResult[i] != msgTerminatorStop[i - LengthToMsgStop])
+                            {
+                                IsMsgTerminatorStop = false;
+                                ClearBufferResult(0, i);
+                                break;
+                            }
+
+                        }
+                        if (IsMsgTerminatorStart && IsMsgTerminatorStop)
+                        {
+                            BufferFrameList.Add(Encoding.ASCII.GetString(BufferResult.ToArray(), msgTerminatorStart.Count + barcodeLengthSize, (int)BarcodeLength));
+                            ClearBufferResult(0, (LengthToMsgStop + msgTerminatorStop.Count));
+                            BufferFrameList.ForEach(Console.WriteLine);
+                        }
+
+
+                    }
+                    else
+                    {
+                        Console.WriteLine("FUNCTION");
+                        if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgNoRead))
+                        {
+                            IsNoReadOk = true;
+                            Console.WriteLine("NOREAD");
+                            ClearBufferResult(0, msgHeartBeat.Count);
+                        }
+                        else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgHeartBeat))
+                        {
+
+                            IsHeartBeatOk = true;
+                            ConnectedHandler.Set();
+                            ClearBufferResult(0, msgHeartBeat.Count);
+                            Console.WriteLine("msgHeartBeat");
+                        }
+                        else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerON))
+                        {
+                            IsTriggerOnOk = true;
+                            ClearBufferResult(0, msgHeartBeat.Count);
+                            Console.WriteLine("msgTriggerON");
+                        }
+                        else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerOFF))
+                        {
+                            IsTriggerOffOk = true;
+                            ClearBufferResult(0, msgHeartBeat.Count);
+                            Console.WriteLine("msgTriggerOFF");
+                        }
+                        else
+                        {
+                            for (int j = msgTerminatorStart.Count; j < msgTerminatorStart.Count + 4; j++)
+                            {
+                                Console.WriteLine("gia tri loai laf {1}--{0}", BufferResult[j], j);
+                            }
+                            ClearBufferResult(0, 4);
+                            Console.WriteLine("ERROR");
+                        }
+                    }
+
+                }
+            }
+
+        }
+
 
         public SocketConnectionResult Disconnect()
         {
             SocketConnectionResult status;
-            if (clientSocket.Connected)
+            if (this.IsSocketConnected())
             {
                 status = SocketConnectionResult.CONNECTED;
             }
@@ -158,21 +397,114 @@ namespace BSICK.Sensors.LMS1xx
                 try
                 {
                     clientSocket.Close();
-                    clientSocket = new TcpClient() { ReceiveTimeout = this.ReceiveTimeout };
+
+                    clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { ReceiveTimeout = this.ReceiveTimeout };
                     status = SocketConnectionResult.DISCONNECTED;
+                    if (IsAutoConntecSet == true)
+
+                    {
+                        Console.WriteLine("STATTTTTTTTTT");
+                        while (IsSocketConnected()) ;
+                        Console.WriteLine("gaiiiiiiiiiiiiiiiiiiiii{0}", this.Connect());
+                        Console.WriteLine("autoconnec laiiiiii");
+                        Console.WriteLine("autoconnec laiiiiii{0}", IsSocketConnected());
+                    }
                 }
-                catch (TimeoutException) 
-                { 
-                    status = SocketConnectionResult.DISCONNECT_TIMEOUT; 
-                    return status; 
+                catch (TimeoutException)
+                {
+                    status = SocketConnectionResult.DISCONNECT_TIMEOUT;
+                    return status;
                 }
-                catch (SystemException) 
-                { 
-                    status = SocketConnectionResult.DISCONNECT_ERROR; 
-                    return status; 
+                catch (SystemException)
+                {
+                    status = SocketConnectionResult.DISCONNECT_ERROR;
+                    return status;
                 }
+
             }
             return status;
+        }
+
+        private SocketConnectionResult SocketBeginReceive()
+        {
+            SocketConnectionResult status;
+            if (this.IsSocketConnected())
+            {
+                status = SocketConnectionResult.CONNECTED;
+                try
+                {
+                    clientSocket.BeginReceive(SocketBuffer, 0, SocketBuffer.Length, SocketFlags.None, SocketReceivedCallBack, this);
+                }
+                catch
+                {
+                    if (this.IsSocketConnected())
+                    {
+                        status = SocketConnectionResult.CONNECTED;
+                        this.Connect();
+                    }
+                    else
+                    {
+                        status = SocketConnectionResult.DISCONNECTED;
+                    }
+                }
+            }
+            else
+            {
+                status = SocketConnectionResult.DISCONNECTED;
+            }
+
+
+
+
+            return status;
+        }
+        private void SocketReceivedCallBack(IAsyncResult ar)
+        {
+
+            if (this.IsSocketConnected())
+            {
+
+                try
+                {
+                    int byteRead = clientSocket.EndReceive(ar);
+                    byte[] data = new byte[byteRead];
+                    Array.Copy(SocketBuffer, 0, data, 0, byteRead);
+                    for (int i = 0; i < byteRead; i++)
+                    {
+                        Console.WriteLine("gia tri nha dk laf laf laf {0},{1}", i, data[i]);
+
+                    }
+                    Console.WriteLine("gia tri do laf {0}---------", Encoding.ASCII.GetString(data.ToArray(), 0, data.Length));
+                    SocketReceived(data);
+                    ConnectedHandler.Set();
+                }
+                catch
+                {
+                    if (!this.IsSocketConnected())
+                    {
+
+                        this.Connect();
+                    }
+                    else
+                    {
+
+                    }
+                }
+            }
+            else
+            {
+
+            }
+
+        }
+        private void SocketReceived(byte[] data)
+
+        {
+
+            BufferResult.AddRange(data);
+
+
+            this.SocketBeginReceive();
         }
 
         public NetworkStreamResult Start()
@@ -184,54 +516,21 @@ namespace BSICK.Sensors.LMS1xx
             {
                 try
                 {
-                    NetworkStream serverStream = clientSocket.GetStream();
-                    serverStream.Write(cmd, 0, cmd.Length);
+
+                    // serverStream.Write(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STARTED;
                 }
-                catch (TimeoutException) 
-                { 
-                    status = NetworkStreamResult.TIMEOUT; 
-                    this.Disconnect(); 
-                    return status; 
-                }
-                catch (SystemException) 
-                { 
-                    status = NetworkStreamResult.ERROR; 
-                    this.Disconnect(); 
-                    return status; 
-                }
-            }
-            else
-            {
-                status = NetworkStreamResult.CLIENT_NOT_CONNECTED;
-            }
-
-            return status;
-        }
-
-        public async Task<NetworkStreamResult> StartAsync()
-        {
-            byte[] cmd = new byte[18] { 0x02, 0x73, 0x4D, 0x4E, 0x20, 0x4C, 0x4D, 0x43, 0x73, 0x74, 0x61, 0x72, 0x74, 0x6D, 0x65, 0x61, 0x73, 0x03 };
-
-            NetworkStreamResult status;
-            if (clientSocket.Connected)
-            {
-                try
+                catch (TimeoutException)
                 {
-                    NetworkStream serverStream = clientSocket.GetStream();
-                    await serverStream.WriteAsync(cmd, 0, cmd.Length);
-                    status = NetworkStreamResult.STARTED;
+                    status = NetworkStreamResult.TIMEOUT;
+                    this.Disconnect();
+                    return status;
                 }
-                catch (TimeoutException) 
-                { 
-                    status = NetworkStreamResult.TIMEOUT; 
-                    this.Disconnect(); return status; 
-                }
-                catch (SystemException) 
-                { 
-                    status = NetworkStreamResult.ERROR; 
-                    this.Disconnect(); 
-                    return status; 
+                catch (SystemException)
+                {
+                    status = NetworkStreamResult.ERROR;
+                    this.Disconnect();
+                    return status;
                 }
             }
             else
@@ -241,6 +540,8 @@ namespace BSICK.Sensors.LMS1xx
 
             return status;
         }
+
+
 
         public NetworkStreamResult Stop()
         {
@@ -251,57 +552,22 @@ namespace BSICK.Sensors.LMS1xx
             {
                 try
                 {
-                    NetworkStream serverStream = clientSocket.GetStream();
 
-                    serverStream.Write(cmd, 0, cmd.Length);
+
+                    //serverStream.Write(cmd, 0, cmd.Length);
                     status = NetworkStreamResult.STOPPED;
                 }
-                catch (TimeoutException) 
-                { 
-                    status = NetworkStreamResult.TIMEOUT; 
-                    this.Disconnect(); 
+                catch (TimeoutException)
+                {
+                    status = NetworkStreamResult.TIMEOUT;
+                    this.Disconnect();
                     return status;
                 }
-                catch (SystemException) 
-                { 
-                    status = NetworkStreamResult.ERROR; 
-                    this.Disconnect(); 
-                    return status; 
-                }
-            }
-            else
-            {
-                status = NetworkStreamResult.CLIENT_NOT_CONNECTED;
-            }
-
-            return status;
-        }
-
-        public async Task<NetworkStreamResult> StopAsync()
-        {
-            byte[] cmd = new byte[17] { 0x02, 0x73, 0x4D, 0x4E, 0x20, 0x4C, 0x4D, 0x43, 0x73, 0x74, 0x6F, 0x70, 0x6D, 0x65, 0x61, 0x73, 0x03 };
-
-            NetworkStreamResult status;
-            if (clientSocket.Connected)
-            {
-                try
+                catch (SystemException)
                 {
-                    NetworkStream serverStream = clientSocket.GetStream();
-
-                    await serverStream.WriteAsync(cmd, 0, cmd.Length);
-                    status = NetworkStreamResult.STOPPED;
-                }
-                catch (TimeoutException) 
-                { 
-                    status = NetworkStreamResult.TIMEOUT; 
-                    this.Disconnect(); 
-                    return status; 
-                }
-                catch (SystemException) 
-                { 
-                    status = NetworkStreamResult.ERROR; 
-                    this.Disconnect(); 
-                    return status; 
+                    status = NetworkStreamResult.ERROR;
+                    this.Disconnect();
+                    return status;
                 }
             }
             else
@@ -311,392 +577,28 @@ namespace BSICK.Sensors.LMS1xx
 
             return status;
         }
+
 
         public byte[] ExecuteRaw(byte[] streamCommand)
         {
             try
             {
-                NetworkStream serverStream = clientSocket.GetStream();
-                serverStream.Write(streamCommand, 0, streamCommand.Length);
-                serverStream.Flush();
+
+                // serverStream.Write(streamCommand, 0, streamCommand.Length);
+                //serverStream.Flush();
 
                 byte[] inStream = new byte[clientSocket.ReceiveBufferSize];
-                serverStream.Read(inStream, 0, (int)clientSocket.ReceiveBufferSize);
+                //serverStream.Read(inStream, 0, (int)clientSocket.ReceiveBufferSize);
 
                 return inStream;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return null;
             }
         }
 
-        public async Task<byte[]> ExecuteRawAsync(byte[] streamCommand)
-        {
-            try
-            {
-                NetworkStream serverStream = clientSocket.GetStream();
-                await serverStream.WriteAsync(streamCommand, 0, streamCommand.Length);
-                await serverStream.FlushAsync();
 
-                byte[] inStream = new byte[clientSocket.ReceiveBufferSize];
-                await serverStream.ReadAsync(inStream, 0, (int)clientSocket.ReceiveBufferSize);
-
-                return inStream;
-            }
-            catch (Exception ex)
-            {
-                return null;
-            }
-        }
-
-        public struct SetAccessModeResult
-        {
-            public byte[] RawData;
-        }
-
-        public SetAccessModeResult SetAccessMode()
-        {
-            SetAccessModeResult result;
-            byte[] command = new byte[] { 0x02, 0x73, 0x41, 0x4E, 0x20, 0x53, 0x65, 0x74, 0x41, 0x63, 0x63, 0x65, 0x73, 0x73, 0x4D, 0x6F, 0x64, 0x65, 0x20, 0x31, 0x03 };
-            result.RawData = this.ExecuteRaw(command);
-            return result;
-        }
-
-        public async Task<SetAccessModeResult> SetAccessModeAsync()
-        {
-            SetAccessModeResult result;
-            byte[] command = new byte[] { 0x02, 0x73, 0x41, 0x4E, 0x20, 0x53, 0x65, 0x74, 0x41, 0x63, 0x63, 0x65, 0x73, 0x73, 0x4D, 0x6F, 0x64, 0x65, 0x20, 0x31, 0x03 };
-            result.RawData = await this.ExecuteRawAsync(command);
-            return result;
-        }
-
-        public struct LMDScandataResult
-        {
-            public bool IsError;
-            public Exception ErrorException;
-            public byte[] RawData;
-            public String RawDataString;
-            public String CommandType;
-            public String Command;
-            public int? VersionNumber;
-            public int? DeviceNumber;
-            public int? SerialNumber;
-            public String DeviceStatus;
-            public int? TelegramCounter;
-            public int? ScanCounter;
-            public uint? TimeSinceStartup;
-            public uint? TimeOfTransmission;
-            public String StatusOfDigitalInputs;
-            public String StatusOfDigitalOutputs;
-            public int? Reserved;
-            public double? ScanFrequency;
-            public double? MeasurementFrequency;
-            public int? AmountOfEncoder;
-            public int? EncoderPosition;
-            public int? EncoderSpeed;
-            public int? AmountOf16BitChannels;
-            public String Content;
-            public String ScaleFactor;
-            public String ScaleFactorOffset;
-            public double? StartAngle;
-            public double? SizeOfSingleAngularStep;
-            public int? AmountOfData;
-            public List<double> DistancesData;
-
-            public LMDScandataResult(byte[] rawData)
-            {
-                IsError = true;
-                ErrorException = null;
-                RawData = rawData;
-                RawDataString = Encoding.ASCII.GetString(rawData);
-                DistancesData = new List<double>();
-                CommandType = String.Empty;
-                Command = String.Empty;
-                VersionNumber = null;
-                DeviceNumber = null;
-                SerialNumber = null;
-                DeviceStatus = String.Empty;
-                TelegramCounter = null;
-                ScanCounter = null;
-                TimeSinceStartup = null;
-                TimeOfTransmission = null;
-                StatusOfDigitalInputs = String.Empty;
-                StatusOfDigitalOutputs = String.Empty;
-                Reserved = null;
-                ScanFrequency = null;
-                MeasurementFrequency = null;
-                AmountOfEncoder = null;
-                EncoderPosition = null;
-                EncoderSpeed = null;
-                AmountOf16BitChannels = null;
-                Content = String.Empty;
-                ScaleFactor = String.Empty;
-                ScaleFactorOffset = String.Empty;
-                StartAngle = null;
-                SizeOfSingleAngularStep = null;
-                AmountOfData = null;
-            }
-        }
-
-        public LMDScandataResult LMDScandata()
-        {
-            byte[] command = new byte[] { 0x02, 0x73, 0x52, 0x4E, 0x20, 0x4C, 0x4D, 0x44, 0x73, 0x63, 0x61, 0x6E, 0x64, 0x61, 0x74, 0x61, 0x03 };
-
-            if (clientSocket.Connected)
-            {
-                byte[] rawData = null;
-                try
-                {
-                    rawData = this.ExecuteRaw(command);
-                }
-                catch (Exception ex)
-                {
-                    return new LMDScandataResult() { IsError = true, ErrorException = ex };
-                }
-
-                if (rawData != null)
-                {
-                    LMDScandataResult result = new LMDScandataResult(rawData);
-                    result.IsError = false;
-                    result.ErrorException = null;
-
-                    int dataIndex = 0;
-                    int dataBlocCounter = 0;
-                    string dataBloc = String.Empty;
-
-                    while (dataBlocCounter < 28)
-                    {
-                        dataIndex++;
-                        if ((dataIndex < result.RawDataString.Length) && !(result.RawDataString[dataIndex].ToString() == " "))
-                        {
-                            dataBloc += result.RawDataString[dataIndex];
-                        }
-                        else
-                        {
-                            ++dataBlocCounter;
-                            switch (dataBlocCounter)
-                            {
-                                case 1: result.CommandType = dataBloc; break;
-                                case 2: result.Command = dataBloc; break;
-                                case 3: result.VersionNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 4: result.DeviceNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 5: result.SerialNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 6: result.DeviceStatus = dataBloc; break;
-                                case 7: result.DeviceStatus += "-" + dataBloc; break;
-                                case 8: result.TelegramCounter = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 9: result.ScanCounter = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 10: result.TimeSinceStartup = uint.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber) / 1000000; break;
-                                case 11: result.TimeOfTransmission = uint.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber) / 1000000; break;
-                                case 12: result.StatusOfDigitalInputs = dataBloc; break;
-                                case 13: result.StatusOfDigitalInputs += "-" + dataBloc; break;
-                                case 14: result.StatusOfDigitalOutputs = dataBloc; break;
-                                case 15: result.StatusOfDigitalOutputs += "-" + dataBloc; break;
-                                case 16: result.Reserved = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 17: result.ScanFrequency = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 100; break;
-                                case 18: result.MeasurementFrequency = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10; break;
-                                case 19: result.AmountOfEncoder = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); if (result.AmountOfEncoder <= 0) dataBlocCounter += 2; break;
-                                case 20: result.EncoderPosition = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 21: result.EncoderSpeed = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 22: result.AmountOf16BitChannels = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 23: result.Content = dataBloc; break;
-                                case 24: result.ScaleFactor = dataBloc; break;
-                                case 25: result.ScaleFactorOffset = dataBloc; break;
-                                case 26: result.StartAngle = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10000; break;
-                                case 27: result.SizeOfSingleAngularStep = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10000; break;
-                                case 28: result.AmountOfData = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                            }
-                            dataBloc = String.Empty;
-                            if (result.CommandType != "sRA") return result;
-                        }
-                    }
-
-                    dataBloc = String.Empty;
-                    while (dataBlocCounter < result.AmountOfData + 28)
-                    {
-                        ++dataIndex;
-                        if (!(result.RawDataString[dataIndex].ToString() == " "))
-                        {
-                            dataBloc += result.RawDataString[dataIndex];
-                        }
-                        else
-                        {
-                            result.DistancesData.Add(Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 1000);
-                            dataBloc = String.Empty;
-                            ++dataBlocCounter;
-                        }
-                    }
-
-                    return result;
-                }
-                else
-                    return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Raw data is null.") };
-            }
-            else
-                return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Client socket not connected.") };
-        }
-
-        public async Task<LMDScandataResult> LMDScandataAsync()
-        {
-            byte[] command = new byte[] { 0x02, 0x73, 0x52, 0x4E, 0x20, 0x4C, 0x4D, 0x44, 0x73, 0x63, 0x61, 0x6E, 0x64, 0x61, 0x74, 0x61, 0x03 };
-
-            if (clientSocket.Connected)
-            {
-                byte[] rawData = null;
-                try
-                {
-                    rawData = await this.ExecuteRawAsync(command);
-                }
-                catch (Exception ex)
-                {
-                    return new LMDScandataResult() { IsError = true, ErrorException = ex };
-                }
-
-                if (rawData != null)
-                {
-                    LMDScandataResult result = new LMDScandataResult(rawData);
-                    result.IsError = false;
-                    result.ErrorException = null;
-
-                    int dataIndex = 0;
-                    int dataBlocCounter = 0;
-                    string dataBloc = String.Empty;
-
-                    while (dataBlocCounter < 28)
-                    {
-                        dataIndex++;
-                        if ((dataIndex < result.RawDataString.Length) && !(result.RawDataString[dataIndex].ToString() == " "))
-                        {
-                            dataBloc += result.RawDataString[dataIndex];
-                        }
-                        else
-                        {
-                            ++dataBlocCounter;
-                            switch (dataBlocCounter)
-                            {
-                                case 1: result.CommandType = dataBloc; break;
-                                case 2: result.Command = dataBloc; break;
-                                case 3: result.VersionNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 4: result.DeviceNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 5: result.SerialNumber = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 6: result.DeviceStatus = dataBloc; break;
-                                case 7: result.DeviceStatus += "-" + dataBloc; break;
-                                case 8: result.TelegramCounter = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 9: result.ScanCounter = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 10: result.TimeSinceStartup = uint.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber) / 1000000; break;
-                                case 11: result.TimeOfTransmission = uint.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber) / 1000000; break;
-                                case 12: result.StatusOfDigitalInputs = dataBloc; break;
-                                case 13: result.StatusOfDigitalInputs += "-" + dataBloc; break;
-                                case 14: result.StatusOfDigitalOutputs = dataBloc; break;
-                                case 15: result.StatusOfDigitalOutputs += "-" + dataBloc; break;
-                                case 16: result.Reserved = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 17: result.ScanFrequency = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 100; break;
-                                case 18: result.MeasurementFrequency = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10; break;
-                                case 19: result.AmountOfEncoder = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); if (result.AmountOfEncoder <= 0) dataBlocCounter += 2; break;
-                                case 20: result.EncoderPosition = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 21: result.EncoderSpeed = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 22: result.AmountOf16BitChannels = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                                case 23: result.Content = dataBloc; break;
-                                case 24: result.ScaleFactor = dataBloc; break;
-                                case 25: result.ScaleFactorOffset = dataBloc; break;
-                                case 26: result.StartAngle = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10000; break;
-                                case 27: result.SizeOfSingleAngularStep = Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 10000; break;
-                                case 28: result.AmountOfData = int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber); break;
-                            }
-                            dataBloc = String.Empty;
-                            if (result.CommandType != "sRA")
-                                return result;
-                        }
-                    }
-
-                    dataBloc = String.Empty;
-                    while (dataBlocCounter < result.AmountOfData + 28)
-                    {
-                        ++dataIndex;
-                        if (!(result.RawDataString[dataIndex].ToString() == " "))
-                        {
-                            dataBloc += result.RawDataString[dataIndex];
-                        }
-                        else
-                        {
-                            result.DistancesData.Add(Convert.ToDouble(int.Parse(dataBloc, System.Globalization.NumberStyles.HexNumber)) / 1000);
-                            dataBloc = String.Empty;
-                            ++dataBlocCounter;
-                        }
-                    }
-
-                    return result;
-                }
-                else
-                    return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Raw data is null.") };
-            }
-            else
-                return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Client socket not connected.") };
-        }
-
-        #endregion
-
-        #region Relevé Asynchrone des données du Capteur
-
-        public async Task<LMDScandataResult> LMDScandataFullModeAsync()
-        {
-            try
-            {
-                LMDScandataResult scandataResult;
-
-                var connectionResult = await this.ConnectAsync();
-                if (connectionResult == SocketConnectionResult.CONNECTED)
-                {
-                    var networkStreamResult = await this.StartAsync();
-                    if (networkStreamResult == NetworkStreamResult.STARTED)
-                    {
-                        scandataResult = await this.LMDScandataAsync(); // TO FIX: First call doesn't return data ?
-                        scandataResult = await this.LMDScandataAsync(); // TO FIX: Second call return datas
-
-                        if (!scandataResult.IsError)
-                        {
-                            networkStreamResult = await this.StopAsync();
-                            if (networkStreamResult == NetworkStreamResult.STOPPED)
-                            {
-                                this.Disconnect();
-                                return scandataResult;
-                            }
-                            else
-                            {
-                                this.Disconnect();
-                                scandataResult.IsError = true;
-                                scandataResult.ErrorException = new Exception(string.Format("{0} Network stream improperly stopped.", scandataResult.ErrorException));
-                                return scandataResult;
-                            }
-                        }
-                        else
-                        {
-                            networkStreamResult = await this.StopAsync();
-                            if (networkStreamResult == NetworkStreamResult.STOPPED)
-                            {
-                                this.Disconnect();
-                                return scandataResult;
-                            }
-                            else
-                            {
-                                this.Disconnect();
-                                scandataResult.IsError = true;
-                                scandataResult.ErrorException = new Exception(string.Format("{0} Network stream improperly stopped.", scandataResult.ErrorException));
-                                return scandataResult;
-                            }
-                        }
-                    }
-                    else
-                        return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Network stream not started.") };
-                }
-                else
-                    return new LMDScandataResult() { IsError = true, ErrorException = new Exception("Client socket not connected.") };
-            }
-            catch (Exception ex)
-            {
-                return new LMDScandataResult() { IsError = true, ErrorException = ex };
-            }
-        }
 
         #endregion
     }
