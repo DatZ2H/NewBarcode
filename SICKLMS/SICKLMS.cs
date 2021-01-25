@@ -141,10 +141,10 @@ namespace BSICK.Sensors.LMS1xx
         {
             return CheckKeepConnectThread.IsAlive;
         }
-        public bool IsNumber(byte value) // 60 is "0"  and 71 is "9"
+        public bool IsNumber(byte value) // 48 is "0"  and 57 is "9"
         {
             Console.WriteLine("gia tri value {0}  ", value);
-            if (60 <= value && value <= 71)
+            if (48 <= value && value <= 57)
             {
                 return true;
             }
@@ -307,10 +307,10 @@ namespace BSICK.Sensors.LMS1xx
                     Console.WriteLine("IsMsgTerminatorStart 1 {0}", BufferResult[msgTerminatorStart.Count]);
                     Console.WriteLine("IsMsgTerminatorStart 2 {0}", BufferResult[msgTerminatorStart.Count + 1]);
                     Console.WriteLine("IsMsgTerminatorStart 3 {0}", BufferResult[msgTerminatorStart.Count + 2]);
-                    Console.WriteLine("IsMsgTerminatorStart 4 {0}", BufferResult[msgTerminatorStart.Count + 3]);
+                    Console.WriteLine("IsMsgTerminatorStart --{0}", (IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])));
                     Console.WriteLine("-----------------------------");
 
-                    if ((IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 3])))
+                    if ((IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])))
                     {
                         Console.WriteLine("IS NUMBER");
                         int BarcodeLength = 0;
@@ -366,10 +366,6 @@ namespace BSICK.Sensors.LMS1xx
                         }
                         else
                         {
-                            for (int j = msgTerminatorStart.Count; j < msgTerminatorStart.Count + 4; j++)
-                            {
-                                Console.WriteLine("gia tri loai laf {1}--{0}", BufferResult[j], j);
-                            }
                             ClearBufferResult(0, 4);
                             Console.WriteLine("ERROR");
                         }
