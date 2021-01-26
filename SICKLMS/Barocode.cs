@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Linq;
 
-namespace BSICK.Sensors.LMS1xx
+namespace SickBarcodeScanner
 {
     public class BarcodeScanner
     {
-        #region Enumérations
+        #region ENUM
 
         public enum SocketConnectionResult
         {
@@ -25,9 +25,10 @@ namespace BSICK.Sensors.LMS1xx
         {
             STARTED = 0,
             STOPPED = 1,
-            TIMEOUT = 2,
-            ERROR = 3,
-            CLIENT_NOT_CONNECTED = 4,
+            SUCCESSED = 2,
+            TIMEOUT = 3,
+            ERROR = 4,
+            CLIENT_NOT_CONNECTED = 5,
         }
 
         #endregion
@@ -39,6 +40,7 @@ namespace BSICK.Sensors.LMS1xx
         public int ReceiveTimeout { get; set; }
         public int SendTimeout { get; set; }
         public int HeartBeatTimeout { get; set; }
+        public int WaitReceiveBarcodeTimeOut { get; set; }
         private bool IsAutoConntecSet { get; set; }
         private bool IsNoReadOk { get; set; }
         private bool IsHeartBeatOk { get; set; }
@@ -65,9 +67,17 @@ namespace BSICK.Sensors.LMS1xx
         // Case TRIGGEROFF 02 3c 53 54 41 52 54 3e 54 47 4f 46 3c 53 54 4f 50 3e 03
         // Case PING       02 3C 53 54 41 52 54 3E 50 49 4E 47 3C 53 54 4F 50 3E 03
 
-        private static ManualResetEvent ConnectedHandler = new ManualResetEvent(false);
+        private static AutoResetEvent ConnectedHandler = new AutoResetEvent(false);
 
-        private static ManualResetEvent ParssingdHandler = new ManualResetEvent(false);
+        private static AutoResetEvent ParssingdHandler = new AutoResetEvent(false);
+
+        private static AutoResetEvent NoReaddHandler = new AutoResetEvent(false);
+
+        private static AutoResetEvent TriggerONdHandler = new AutoResetEvent(false);
+
+        private static AutoResetEvent TriggerOFFdHandler = new AutoResetEvent(false);
+
+        private static AutoResetEvent ResultedHandler = new AutoResetEvent(false);
 
         private Thread CheckKeepConnectThread;
 
@@ -88,14 +98,14 @@ namespace BSICK.Sensors.LMS1xx
             this.IpAddress = String.Empty;
             this.Port = 0;
             this.HeartBeatTimeout = 30000;
-            //CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
+            this.WaitReceiveBarcodeTimeOut = 600000;
             Thread SocketParsingDebugThread = new Thread(() => BufferParsingDebugThread());
             SocketParsingDebugThread.Start();
-            Console.WriteLine("Thread is ok");
             SocketBuffer = new byte[socketBufferSize];
             BufferResult = new List<byte>();
             BufferFrameList = new List<string>();
             barcodeLengthSize = 4;
+            this.WaitReceiveBarcodeTimeOut = 600000;
             msgTriggerON = new List<byte>() { 0x54, 0x47, 0x4f, 0x4e }; // "TGON"
             msgTriggerOFF = new List<byte>() { 0x54, 0x47, 0x4f, 0x46 };// "TGOF"
             msgTerminatorStart = new List<byte>() { 0x02, 0x3c, 0x53, 0x54, 0x41, 0x52, 0x54, 0x3e }; //"STX<START>"
@@ -104,6 +114,7 @@ namespace BSICK.Sensors.LMS1xx
             msgNoRead = new List<byte>() { 0x4d, 0x49, 0x53, 0x53 };// "MISS"
 
 
+            Console.WriteLine("");
         }
 
         public BarcodeScanner(string ipAdress, int port, int receiveTimeout, int sendTimeout, int heartBeatTimeout)
@@ -112,10 +123,9 @@ namespace BSICK.Sensors.LMS1xx
             this.IpAddress = ipAdress;
             this.Port = port;
             this.HeartBeatTimeout = heartBeatTimeout;
-            //CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
+            this.WaitReceiveBarcodeTimeOut = 600000;
             Thread SocketParsingDebugThread = new Thread(() => BufferParsingDebugThread());
             SocketParsingDebugThread.Start();
-            Console.WriteLine("Thread is ok");
             SocketBuffer = new byte[socketBufferSize];
             BufferResult = new List<byte>();
             BufferFrameList = new List<string>();
@@ -143,7 +153,6 @@ namespace BSICK.Sensors.LMS1xx
         }
         public bool IsNumber(byte value) // 48 is "0"  and 57 is "9"
         {
-            Console.WriteLine("gia tri value {0}  ", value);
             if (48 <= value && value <= 57)
             {
                 return true;
@@ -168,23 +177,18 @@ namespace BSICK.Sensors.LMS1xx
         }
         public void CheckKeepConnect()
         {
-            Console.WriteLine("the system  check keep connect ");
             while (IsSocketConnected())
             {
                 if (!ConnectedHandler.WaitOne(this.HeartBeatTimeout))
                 {
-                    ConnectedHandler.Reset();
+
                     Console.WriteLine("the system CheckKeepConnect {0}", this.Disconnect());
-                    Console.WriteLine("the system disconnect because don't catch heartbeat");
 
                     break;
 
                 }
-                // Thread.Sleep(2000);
 
             }
-            Console.WriteLine("aaaaaaaaaaaaaaaaaaaaaaaaaa");
-            Console.WriteLine("aaaaaaaaaaaaaaaaaaaaaaaaaa          {0}", IsSocketConnected());
             CheckKeepConnectThread = null;
         }
 
@@ -203,16 +207,13 @@ namespace BSICK.Sensors.LMS1xx
 
             while (status != SocketConnectionResult.CONNECTED)
             {
-                Console.WriteLine("status ----------{0}", status);
+
                 try
                 {
-                    Thread.Sleep(1000);
-                    Console.WriteLine("--------------");
                     clientSocket.Connect(this.IpAddress, this.Port);
                     status = SocketConnectionResult.CONNECTED;
                     this.SocketBeginReceive();
 
-                    Console.WriteLine("the system ConnectEDDDDDD");
                     if (CheckKeepConnectThread == null)
                     {
                         CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
@@ -266,11 +267,9 @@ namespace BSICK.Sensors.LMS1xx
 
                 if (ParssingdHandler.WaitOne(1000)) continue;
 
-                if (!ParssingdHandler.Reset()) continue;
 
                 if (IsSocketConnected())
                 {
-                    Console.WriteLine("IsMsgTerminatorStart  {0}", IsSocketConnected());
 
                     SocketParsing();
                 }
@@ -285,30 +284,23 @@ namespace BSICK.Sensors.LMS1xx
 
             while ((BufferResult.Count >= (msgTerminatorStart.Count + barcodeLengthSize + msgTerminatorStop.Count)) && IsSocketConnected())
             {
-                Console.WriteLine("BufferResult.Count");
+
                 bool IsMsgTerminatorStart = true;
                 bool IsMsgTerminatorStop = true;
                 for (int i = 0; i < msgTerminatorStart.Count; i++)
                 {
-                    Console.WriteLine("Start-true");
+
                     if (BufferResult[i] != msgTerminatorStart[i])
                     {
                         IsMsgTerminatorStart = false;
                         ClearBufferResult(0, 1);
-                        Console.WriteLine("Start-true");
+
                         break;
                     }
 
                 }
                 if (IsMsgTerminatorStart)
                 {
-                    Console.WriteLine("IsMsgTerminatorStart");
-                    Console.WriteLine("-----------------------------");
-                    Console.WriteLine("IsMsgTerminatorStart 1 {0}", BufferResult[msgTerminatorStart.Count]);
-                    Console.WriteLine("IsMsgTerminatorStart 2 {0}", BufferResult[msgTerminatorStart.Count + 1]);
-                    Console.WriteLine("IsMsgTerminatorStart 3 {0}", BufferResult[msgTerminatorStart.Count + 2]);
-                    Console.WriteLine("IsMsgTerminatorStart --{0}", (IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])));
-                    Console.WriteLine("-----------------------------");
 
                     if ((IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])))
                     {
@@ -329,6 +321,7 @@ namespace BSICK.Sensors.LMS1xx
                         if (IsMsgTerminatorStart && IsMsgTerminatorStop)
                         {
                             BufferFrameList.Add(Encoding.ASCII.GetString(BufferResult.ToArray(), msgTerminatorStart.Count + barcodeLengthSize, (int)BarcodeLength));
+                            ResultedHandler.Set();
                             ClearBufferResult(0, (LengthToMsgStop + msgTerminatorStop.Count));
                             BufferFrameList.ForEach(Console.WriteLine);
                         }
@@ -341,6 +334,7 @@ namespace BSICK.Sensors.LMS1xx
                         if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgNoRead))
                         {
                             IsNoReadOk = true;
+                            NoReaddHandler.Set();
                             Console.WriteLine("NOREAD");
                             ClearBufferResult(0, msgHeartBeat.Count);
                         }
@@ -355,12 +349,14 @@ namespace BSICK.Sensors.LMS1xx
                         else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerON))
                         {
                             IsTriggerOnOk = true;
+                            TriggerONdHandler.Set();
                             ClearBufferResult(0, msgHeartBeat.Count);
                             Console.WriteLine("msgTriggerON");
                         }
                         else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerOFF))
                         {
                             IsTriggerOffOk = true;
+                            TriggerOFFdHandler.Set();
                             ClearBufferResult(0, msgHeartBeat.Count);
                             Console.WriteLine("msgTriggerOFF");
                         }
@@ -374,6 +370,106 @@ namespace BSICK.Sensors.LMS1xx
                 }
             }
 
+        }
+
+        public NetworkStreamResult SetTrigger()
+        {
+            NetworkStreamResult status = NetworkStreamResult.ERROR;
+            byte[] cmdTrigger = new byte[msgTerminatorStart.Count + msgTriggerON.Count + msgTerminatorStop.Count];
+            Array.Copy(msgTerminatorStart.ToArray(), 0, cmdTrigger, 0, msgTerminatorStart.Count);
+            Array.Copy(msgTriggerON.ToArray(), 0, cmdTrigger, msgTerminatorStart.Count, msgTriggerON.Count);
+            Array.Copy(msgTerminatorStop.ToArray(), 0, cmdTrigger, msgTerminatorStart.Count + msgTriggerON.Count, msgTerminatorStop.Count);
+
+            for (int i = 0; i < 5; i++)
+            {
+
+
+                if (SocketSend(cmdTrigger) == NetworkStreamResult.STARTED)
+                {
+                    Console.WriteLine("gia tri send trigger {0}  ", cmdTrigger.ToString());
+                    status = NetworkStreamResult.STARTED;
+                }
+                else
+                {
+                    status = NetworkStreamResult.ERROR;
+                }
+
+                if (TriggerONdHandler.WaitOne(1000))
+                {
+                    status = NetworkStreamResult.STOPPED;
+                    Console.WriteLine("gia tri send trigger ONC -----------------------------  ");
+                    break;
+                }
+                else
+                {
+                    status = NetworkStreamResult.TIMEOUT;
+                }
+            }
+            return status;
+        }
+        public NetworkStreamResult ResetTrigger()
+        {
+            NetworkStreamResult status = NetworkStreamResult.ERROR;
+            byte[] cmdTrigger = new byte[msgTerminatorStart.Count + msgTriggerOFF.Count + msgTerminatorStop.Count];
+            Array.Copy(msgTerminatorStart.ToArray(), 0, cmdTrigger, 0, msgTerminatorStart.Count);
+            Array.Copy(msgTriggerOFF.ToArray(), 0, cmdTrigger, msgTerminatorStart.Count, msgTriggerOFF.Count);
+            Array.Copy(msgTerminatorStop.ToArray(), 0, cmdTrigger, msgTerminatorStart.Count + msgTriggerOFF.Count, msgTerminatorStop.Count);
+            for (int i = 0; i <= 5; i++)
+            {
+
+                if (SocketSend(cmdTrigger) == NetworkStreamResult.STARTED)
+                {
+                    Console.WriteLine("gia tri send trigger OFF {0}  ", cmdTrigger.ToString());
+                }
+                else
+                {
+                    status = NetworkStreamResult.ERROR;
+                }
+
+                if (TriggerOFFdHandler.WaitOne(1000))
+                {
+                    status = NetworkStreamResult.STARTED;
+                    Console.WriteLine("gia tri send trigger OFF -----------------------------  ");
+                    break;
+                }
+                else
+                {
+
+                    status = NetworkStreamResult.TIMEOUT;
+                }
+            }
+            return status;
+        }
+        public NetworkStreamResult SocketSend(byte[] cmd)
+        {
+            NetworkStreamResult status;
+            if (IsSocketConnected())
+            {
+
+
+                try
+                {
+                    clientSocket.Send(cmd, 0, cmd.Length, SocketFlags.None);
+                    status = NetworkStreamResult.STARTED;
+                }
+                catch (TimeoutException)
+                {
+                    status = NetworkStreamResult.TIMEOUT;
+                    this.Disconnect();
+                    return status;
+                }
+                catch (SystemException)
+                {
+                    status = NetworkStreamResult.ERROR;
+                    this.Disconnect();
+                    return status;
+                }
+            }
+            else
+            {
+                status = NetworkStreamResult.CLIENT_NOT_CONNECTED;
+            }
+            return status;
         }
 
 
@@ -399,11 +495,7 @@ namespace BSICK.Sensors.LMS1xx
                     if (IsAutoConntecSet == true)
 
                     {
-                        Console.WriteLine("STATTTTTTTTTT");
                         while (IsSocketConnected()) ;
-                        Console.WriteLine("gaiiiiiiiiiiiiiiiiiiiii{0}", this.Connect());
-                        Console.WriteLine("autoconnec laiiiiii");
-                        Console.WriteLine("autoconnec laiiiiii{0}", IsSocketConnected());
                     }
                 }
                 catch (TimeoutException)
@@ -465,12 +557,6 @@ namespace BSICK.Sensors.LMS1xx
                     int byteRead = clientSocket.EndReceive(ar);
                     byte[] data = new byte[byteRead];
                     Array.Copy(SocketBuffer, 0, data, 0, byteRead);
-                    for (int i = 0; i < byteRead; i++)
-                    {
-                        Console.WriteLine("gia tri nha dk laf laf laf {0},{1}", i, data[i]);
-
-                    }
-                    Console.WriteLine("gia tri do laf {0}---------", Encoding.ASCII.GetString(data.ToArray(), 0, data.Length));
                     SocketReceived(data);
                     ConnectedHandler.Set();
                 }
@@ -505,7 +591,7 @@ namespace BSICK.Sensors.LMS1xx
 
         public NetworkStreamResult Start()
         {
-            byte[] cmd = new byte[18] { 0x02, 0x73, 0x4D, 0x4E, 0x20, 0x4C, 0x4D, 0x43, 0x73, 0x74, 0x61, 0x72, 0x74, 0x6D, 0x65, 0x61, 0x73, 0x03 };
+
 
             NetworkStreamResult status;
             if (clientSocket.Connected)
@@ -513,8 +599,22 @@ namespace BSICK.Sensors.LMS1xx
                 try
                 {
 
-                    // serverStream.Write(cmd, 0, cmd.Length);
-                    status = NetworkStreamResult.STARTED;
+                    SetTrigger();
+
+                    if (ResultedHandler.WaitOne(WaitReceiveBarcodeTimeOut))
+                    {
+                        Console.WriteLine("Start send true+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ ");
+                        status = NetworkStreamResult.STARTED;
+                    }
+                    else
+                    {
+
+                        Console.WriteLine("Start send false ");
+                        ResetTrigger();
+                        Console.WriteLine("ResetTrigger ... ");
+                        status = NetworkStreamResult.TIMEOUT;
+                    }
+
                 }
                 catch (TimeoutException)
                 {
@@ -573,28 +673,6 @@ namespace BSICK.Sensors.LMS1xx
 
             return status;
         }
-
-
-        public byte[] ExecuteRaw(byte[] streamCommand)
-        {
-            try
-            {
-
-                // serverStream.Write(streamCommand, 0, streamCommand.Length);
-                //serverStream.Flush();
-
-                byte[] inStream = new byte[clientSocket.ReceiveBufferSize];
-                //serverStream.Read(inStream, 0, (int)clientSocket.ReceiveBufferSize);
-
-                return inStream;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-
-
 
         #endregion
     }
