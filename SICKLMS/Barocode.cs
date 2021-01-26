@@ -33,7 +33,7 @@ namespace SickBarcodeScanner
 
         #endregion
 
-        #region Propriétés publiques
+        #region Properties
 
         public String IpAddress { get; set; }
         public int Port { get; set; }
@@ -81,15 +81,12 @@ namespace SickBarcodeScanner
 
         private Thread CheckKeepConnectThread;
 
-        #endregion
-
-        #region Properties
-
         private Socket clientSocket;
 
         #endregion
 
-        #region Constructeurs
+
+        #region Constructors
 
         public BarcodeScanner()
         {
@@ -141,7 +138,7 @@ namespace SickBarcodeScanner
 
         #endregion
 
-        #region Methodes de base pour le pilotage du capteur
+        #region Method
 
         public bool IsSocketConnected()
         {
@@ -151,7 +148,7 @@ namespace SickBarcodeScanner
         {
             return CheckKeepConnectThread.IsAlive;
         }
-        public bool IsNumber(byte value) // 48 is "0"  and 57 is "9"
+        private bool IsNumber(byte value) // 48 is "0"  and 57 is "9"
         {
             if (48 <= value && value <= 57)
             {
@@ -163,7 +160,7 @@ namespace SickBarcodeScanner
             }
 
         }
-        public bool IsEqualMsg(List<byte> bufferIn, int startIndex, List<byte> bufferOut)
+        private bool IsEqualMsg(List<byte> bufferIn, int startIndex, List<byte> bufferOut)
         {
             bool ketqua;
             ketqua = bufferIn.GetRange(startIndex, bufferOut.Count).SequenceEqual(bufferOut);
@@ -171,7 +168,7 @@ namespace SickBarcodeScanner
 
 
         }
-        public void ClearBufferResult(int StartIndex, int Index)
+        private void ClearBufferResult(int StartIndex, int Index)
         {
             BufferResult.RemoveRange(StartIndex, Index);
         }
@@ -182,19 +179,20 @@ namespace SickBarcodeScanner
                 if (!ConnectedHandler.WaitOne(this.HeartBeatTimeout))
                 {
 
-                    Console.WriteLine("the system CheckKeepConnect {0}", this.Disconnect());
+                    Console.WriteLine("CheckKeepConnect is {0}", this.Disconnect());
 
                     break;
 
                 }
 
             }
+            Console.WriteLine("CheckKeepConnect is {0} out ", this.Disconnect());
             CheckKeepConnectThread = null;
         }
 
         public SocketConnectionResult Connect()
         {
-            Console.WriteLine("the system Connecting");
+            Console.WriteLine("Connect System connecting...");
             SocketConnectionResult status;
             if (this.IsSocketConnected())
             {
@@ -218,24 +216,24 @@ namespace SickBarcodeScanner
                     {
                         CheckKeepConnectThread = new Thread(() => CheckKeepConnect());
                         CheckKeepConnectThread.Start();
+                        Console.WriteLine("Connect try beginReceive,CheckKeepConnectThread Start.. ");
                     }
                     else
                     {
-                        Console.WriteLine("Thread is runnign");
+                        Console.WriteLine("Thread is running");
                     }
                 }
                 catch (TimeoutException)
                 {
                     status = SocketConnectionResult.CONNECT_TIMEOUT;
 
-                    Console.WriteLine("the system TimeoutException {0}", this.Disconnect());
+                    Console.WriteLine("The System Connect TimeoutException {0}", this.Disconnect());
                     return status;
                 }
-                catch (SystemException ex)
+                catch (SystemException)
                 {
                     status = SocketConnectionResult.CONNECT_ERROR;
-                    Console.WriteLine("this error is {0}", ex);
-                    Console.WriteLine("the system SystemException {0}", this.Disconnect());
+                    Console.WriteLine("The System Connect SystemException {0}", this.Disconnect());
                     return status;
                 }
 
@@ -266,12 +264,11 @@ namespace SickBarcodeScanner
             {
 
                 if (ParssingdHandler.WaitOne(1000)) continue;
-
-
                 if (IsSocketConnected())
                 {
 
                     SocketParsing();
+                    Console.WriteLine("BufferParsingDebugThread Runing and SocketParsing   ");
                 }
             }
 
@@ -304,7 +301,7 @@ namespace SickBarcodeScanner
 
                     if ((IsNumber(BufferResult[msgTerminatorStart.Count])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 1])) && (IsNumber(BufferResult[msgTerminatorStart.Count + 2])))
                     {
-                        Console.WriteLine("IS NUMBER");
+                        Console.WriteLine("SocketParsing => IS NUMBER");
                         int BarcodeLength = 0;
                         BarcodeLength = Int32.Parse(Encoding.ASCII.GetString(BufferResult.ToArray(), msgTerminatorStart.Count, barcodeLengthSize - 1));
                         int LengthToMsgStop = msgTerminatorStart.Count + barcodeLengthSize + BarcodeLength;
@@ -324,19 +321,20 @@ namespace SickBarcodeScanner
                             ResultedHandler.Set();
                             ClearBufferResult(0, (LengthToMsgStop + msgTerminatorStop.Count));
                             BufferFrameList.ForEach(Console.WriteLine);
+                            Console.WriteLine("SocketParsing => Resulted is ok");
                         }
 
 
                     }
                     else
                     {
-                        Console.WriteLine("FUNCTION");
+                        Console.WriteLine("SocketParsing => is FUNCTION");
                         if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgNoRead))
                         {
                             IsNoReadOk = true;
                             NoReaddHandler.Set();
-                            Console.WriteLine("NOREAD");
-                            ClearBufferResult(0, msgHeartBeat.Count);
+                            Console.WriteLine("SocketParsing => NOREAD");
+                            ClearBufferResult(0, msgNoRead.Count);
                         }
                         else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgHeartBeat))
                         {
@@ -344,26 +342,26 @@ namespace SickBarcodeScanner
                             IsHeartBeatOk = true;
                             ConnectedHandler.Set();
                             ClearBufferResult(0, msgHeartBeat.Count);
-                            Console.WriteLine("msgHeartBeat");
+                            Console.WriteLine("SocketParsing => PING");
                         }
                         else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerON))
                         {
                             IsTriggerOnOk = true;
                             TriggerONdHandler.Set();
-                            ClearBufferResult(0, msgHeartBeat.Count);
-                            Console.WriteLine("msgTriggerON");
+                            ClearBufferResult(0, msgTriggerON.Count);
+                            Console.WriteLine("SocketParsing => TRIGGER ON OK");
                         }
                         else if (IsEqualMsg(BufferResult, msgTerminatorStart.Count, msgTriggerOFF))
                         {
                             IsTriggerOffOk = true;
                             TriggerOFFdHandler.Set();
-                            ClearBufferResult(0, msgHeartBeat.Count);
-                            Console.WriteLine("msgTriggerOFF");
+                            ClearBufferResult(0, msgTriggerOFF.Count);
+                            Console.WriteLine("SocketParsing TRIGGER OFF OK");
                         }
                         else
                         {
                             ClearBufferResult(0, 4);
-                            Console.WriteLine("ERROR");
+                            Console.WriteLine("SocketParsing => ERROR");
                         }
                     }
 
@@ -386,7 +384,7 @@ namespace SickBarcodeScanner
 
                 if (SocketSend(cmdTrigger) == NetworkStreamResult.STARTED)
                 {
-                    Console.WriteLine("gia tri send trigger {0}  ", cmdTrigger.ToString());
+                  
                     status = NetworkStreamResult.STARTED;
                 }
                 else
@@ -397,7 +395,7 @@ namespace SickBarcodeScanner
                 if (TriggerONdHandler.WaitOne(1000))
                 {
                     status = NetworkStreamResult.STOPPED;
-                    Console.WriteLine("gia tri send trigger ONC -----------------------------  ");
+                   
                     break;
                 }
                 else
@@ -419,7 +417,7 @@ namespace SickBarcodeScanner
 
                 if (SocketSend(cmdTrigger) == NetworkStreamResult.STARTED)
                 {
-                    Console.WriteLine("gia tri send trigger OFF {0}  ", cmdTrigger.ToString());
+                    
                 }
                 else
                 {
@@ -429,7 +427,7 @@ namespace SickBarcodeScanner
                 if (TriggerOFFdHandler.WaitOne(1000))
                 {
                     status = NetworkStreamResult.STARTED;
-                    Console.WriteLine("gia tri send trigger OFF -----------------------------  ");
+                   
                     break;
                 }
                 else
@@ -603,7 +601,7 @@ namespace SickBarcodeScanner
 
                     if (ResultedHandler.WaitOne(WaitReceiveBarcodeTimeOut))
                     {
-                        Console.WriteLine("Start send true+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ ");
+                      
                         status = NetworkStreamResult.STARTED;
                     }
                     else

@@ -13,11 +13,13 @@ namespace SICKLMS
         static void Main(string[] args)
         {
             Sick.Connect();
-            _connected.WaitOne(500);
+            
             for (int i = 0; i < 5; i++)
             {
                 Sick.Start();
             }
+            _connected.WaitOne(500);
+            Console.WriteLine("                         ");
         }
     }
 }
